@@ -13,7 +13,7 @@ CSRICommManager::~CSRICommManager()
 //��ʼ��
 bool CSRICommManager::Init()
 {
-	mTCPClient.OpenTCP("192.168.1.108", 4008);
+	mTCPClient.OpenTCP("192.168.0.108", 4008);
 	mTCPClient.AddCommParser(&mATParser);
 	mTCPClient.AddCommParser(&mM8218Parser);
 

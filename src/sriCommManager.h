@@ -6,6 +6,7 @@
 #include "sriCommTCPClient.h"
 #include "sriCommATParser.h"
 #include "sriCommM8218Parser.h"
+// #include <Eigen/Dense>
 
 class CSRICommManager
 {
@@ -18,14 +19,18 @@ public:
 	bool Stop();
 
 	bool SendCommand(std::string command, std::string parames);
+	bool SendGODCommand(std::string command, std::string parames);
 	
-	bool OnNetworkFailure(std::string infor);//Í¨Ñ¶Ê§°Ü
-	bool OnCommACK(std::string command);//ACKÓ¦´ðÊý¾Ý´¦Àí
-	bool OnCommM8218(float fx, float fy, float fz, float mx, float my, float mz);//GSDÊý¾Ý´¦Àí
+	bool OnNetworkFailure(std::string infor);//Í¨Ñ¶Ê§ï¿½ï¿½
+	bool OnCommACK(std::string command);//ACKÓ¦ï¿½ï¿½ï¿½ï¿½ï¿½Ý´ï¿½ï¿½ï¿½
+	bool OnCommM8218(float fx, float fy, float fz, float mx, float my, float mz);//GSDï¿½ï¿½ï¿½Ý´ï¿½ï¿½ï¿½
+	float force[6] = {0};
+
+	// Eigen::Vector2d getBaseForce(Eigen::Vector3d eulerAngle);
 private:
 	CSRICommTCPClient mTCPClient;
-	CSRICommATParser mATParser;//ATÖ¸Áî½âÎöÆ÷
-	CSRICommM8218Parser mM8218Parser;//GSDÊý¾Ý½âÎöÆ÷
+	CSRICommATParser mATParser;//ATÖ¸ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+	CSRICommM8218Parser mM8218Parser;//GSDï¿½ï¿½ï¿½Ý½ï¿½ï¿½ï¿½ï¿½ï¿½
 
 	bool mIsGetACK;
 	std::string mCommandACK;

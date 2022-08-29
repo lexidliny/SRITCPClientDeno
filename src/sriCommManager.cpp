@@ -1,4 +1,6 @@
+#include <Eigen/Dense>
 #include "sriCommManager.h"
+
 
 
 
@@ -13,7 +15,7 @@ CSRICommManager::~CSRICommManager()
 //��ʼ��
 bool CSRICommManager::Init()
 {
-	mTCPClient.OpenTCP("192.168.0.108", 4008);
+	mTCPClient.OpenTCP("192.168.1.108", 4008);
 	mTCPClient.AddCommParser(&mATParser);
 	mTCPClient.AddCommParser(&mM8218Parser);
 
@@ -45,6 +47,10 @@ bool CSRICommManager::Run()
 	{
 		return false;
 	}
+	// if (SendCommand("EIP", "192.168.1.108") == false)
+	// {
+	// 	return false;
+	// }
 	//Send command to M8128 to set data upload format
 	//��m8128����ָ����������ϴ���ʽ
 	if (SendCommand("SGDM", "(A01,A02,A03,A04,A05,A06);E;1;(WMA:1)") == false)
@@ -59,11 +65,16 @@ bool CSRICommManager::Run()
 	}
 	//Send command to M8128 Start to upload sensor data continuously��
 	//��m8128����ָ���ʼ�����ϴ�����������
-	if (SendCommand("GSD", "") == false)
+	if (SendCommand("SMPF", "2000") == false)
 	{
 		//GSD has no ACK
 		//return false;
 	}
+	// if (SendCommand("GSD", "") == false)
+	// {
+	// 	//GSD has no ACK
+	// 	//return false;
+	// }
 	return true;
 }
 
@@ -129,16 +140,32 @@ bool CSRICommManager::SendCommand(std::string command, std::string parames)
 		}
 	}
 #endif
-	//
+	
 	if (mCommandACK != command)
 	{
 		//ACK command error
 		return false;
 	}
-	//
+	
 	printf("ACK+%s=%s", mCommandACK.data(), mParamesACK.data());
 	//
 	return true;
+}
+
+bool CSRICommManager::SendGODCommand(std::string command, std::string parames)
+{
+	mIsGetACK = false;
+	mCommandACK = "";
+	mParamesACK = "";
+
+	//Combination command
+	//���ATָ��
+	std::string atCommand = "AT+" + command + "=" + parames + "\r\n";
+	if (mTCPClient.OnSendData((BYTE*)atCommand.data(), (int)atCommand.length()) == false)
+	{
+		return false;
+	}
+	// printf("ACK+%s=%s", mCommandACK.data(), mParamesACK.data());
 }
 
 //ACK command processing
@@ -166,7 +193,73 @@ bool CSRICommManager::OnCommACK(std::string command)
 //M8128����
 bool CSRICommManager::OnCommM8218(float fx, float fy, float fz, float mx, float my, float mz)
 {
-	printf("M8218 = %f, %f, %f,   %f, %f, %f\n", fx, fy, fz, mx, my, mz);
+
+	Eigen::VectorXd force_sensor(6);
+	Eigen::VectorXd force_end(6);
+	Eigen::MatrixXd adj(6,6);
+	adj.setZero();
+
+	force_sensor[0] = fx;
+	force_sensor[1] = fy;
+	force_sensor[2] = fz;
+	force_sensor[3] = mx;
+	force_sensor[4] = my;
+	force_sensor[5] = mz;
+
+	Eigen::Matrix3d R;
+	Eigen::Matrix3d P;
+	Eigen::Matrix3d P_R;
+	R << 1.,0.,0.,
+		 0.,1.,0.,
+		 0.,0.,1.;
+	P << 0.,-0.1095,0.,
+		 0.1095, 0., 0.,
+		 0.,0.,0.;
+	P_R = P * R;
+	adj.block(0,0,3,3) = R;
+	// adj.block(0,3,3,3) = Eigen::Vector3d::Zero();
+	adj.block(3,0,3,3) = P * R;
+	adj.block(3,3,3,3) = R;
+	
+	force_end = adj * force_sensor;
+	for (int i = 0; i < 6; i++)
+	{
+		force[i] = force_end[i];
+	}
+	// for (int i = 0; i < 6; i++)
+	// {
+	// 	std::cout << force[i] << " ";
+	// }
+	// std::cout << std::endl;
+	// printf("M8218 = %f, %f, %f,   %f, %f, %f\n", fx, fy, fz, mx, my, mz); 109.5
+	Eigen::Vector3d eulerAngle;
+	eulerAngle[0] = -142.406 / 180. * M_PI;
+	eulerAngle[1] = 22.175 / 180. * M_PI;
+	eulerAngle[2] = 77.788 / 180. * M_PI;
+	Eigen::AngleAxisd rollAngle(Eigen::AngleAxisd(eulerAngle(0),Eigen::Vector3d::UnitX()));
+    Eigen::AngleAxisd pitchAngle(Eigen::AngleAxisd(eulerAngle(1),Eigen::Vector3d::UnitY()));
+    Eigen::AngleAxisd yawAngle(Eigen::AngleAxisd(eulerAngle(2),Eigen::Vector3d::UnitZ()));
+
+	Eigen::Matrix3d rotation_matrix;
+	rotation_matrix=yawAngle*pitchAngle*rollAngle;
+	Eigen::Vector3d efffect_force(force[0], force[1], force[2]);
+	Eigen::Vector3d Base_force = rotation_matrix.inverse() * efffect_force;
+	Eigen::Vector2d output_force(Base_force[0], Base_force[1]);
+	std::cout << "force : " << output_force.transpose() << std::endl;
 
 	return true;
 }
+
+// Eigen::Vector2d CSRICommManager::getBaseForce(Eigen::Vector3d eulerAngle)
+// {
+// 	Eigen::AngleAxisd rollAngle(Eigen::AngleAxisd(eulerAngle(0),Eigen::Vector3d::UnitX()));
+//     Eigen::AngleAxisd pitchAngle(Eigen::AngleAxisd(eulerAngle(1),Eigen::Vector3d::UnitY()));
+//     Eigen::AngleAxisd yawAngle(Eigen::AngleAxisd(eulerAngle(2),Eigen::Vector3d::UnitZ()));
+
+// 	Eigen::Matrix3d rotation_matrix;
+// 	rotation_matrix=yawAngle*pitchAngle*rollAngle;
+// 	Eigen::Vector3d efffect_force(force[0], force[1], force[2]);
+// 	Eigen::Vector3d Base_force = rotation_matrix.inverse() * efffect_force;
+// 	Eigen::Vector2d output_force(Base_force[0], Base_force[1]);
+// 	return output_force;
+// }
